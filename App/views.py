@@ -1,5 +1,6 @@
 import hashlib
 import random
+import re
 
 from flask import Blueprint, render_template, request, g, session, redirect, url_for
 from App.models import Article, db, Article_list, Admin
@@ -35,17 +36,25 @@ def index():
             return render_template('nothingGetForSearch.html')
     return render_template('index.html',articlelist = articlelist, articlelists = articlelists)
 
-@blue.route('/<data>/')
-def check(data):
+@blue.route('/check/',methods=["GET","POST"])
+def check():
     p=Article()
     articlelist = p.query.all()
-    bb = Article_list()
-    articlelists = bb.query.all()
-    data = Article.query.filter_by(block_article=data).first()
-    if data:
-        articlelists = data.article
+    check_mark = request.form.get('keyboard')
+    articlelists = Article_list.query.filter(Article_list.title.contains(check_mark))
+
+    print(request.form.get('keyboard'))
+    return render_template('index.html', articlelist=articlelist, articlelists=articlelists)
+
+@blue.route('/check/<ccheck>/',methods=["GET","POST"])
+def checkdata(ccheck):
+    p=Article()
+    articlelist = p.query.all()
+
+    articlelists = Article_list.query.filter(Article_list.type==ccheck)
 
     return render_template('index.html', articlelist=articlelist, articlelists=articlelists)
+
 
 @blue.route('/search/',methods=["GET","POST"])
 def search():
@@ -65,23 +74,28 @@ def admin_index():
         username = request.form.get('username')
         userpassword = md5_password(request.form.get('userpwd'))
 
-        person = Admin.query.filter_by(name=username,password=userpassword)
-        if not person:
+        person = Admin.query.filter(Admin.name==username)
 
-            #考虑密码错误后加入验证码
+        if person.first():
+            t=person.first().password.replace("\n","")
 
-            return render_template('admin_login.html')
-        session['username'] = username
-        #要使用session加密和md5加密和用戶名登錄有效时间
-        session['password'] = userpassword
-        return render_template('admin_index.html',username = username)
+            if t == userpassword:
+                print(1)
+                session['username'] = username
+                # 要使用session加密和md5加密和用戶名登錄有效时间
+                session['password'] = userpassword
+                #考虑密码错误后加入验证码
+                return render_template('admin_index.html', username=username)
+
+        return render_template('admin_login.html')
     else:
         tempdata=session.get('username','')
+        print(tempdata)
         if not tempdata:
             return render_template('admin_login.html')
-        return render_template('admin_index.html',username = tempdata)
+        return render_template('admin_index.html', username=tempdata)
 
-@blue.route('/admin_index/article',methods=["GET","POST"])
+@blue.route('/admin_index/article/',methods=["GET","POST"])
 def article():
     tempdata=session.get('username','')
     if not tempdata:
@@ -90,7 +104,7 @@ def article():
     articlelists = Article_list.query.all()
     return render_template('article.html',articlelists=articlelists)
 
-@blue.route('/admin_index/article_add',methods=["GET","POST"])
+@blue.route('/admin_index/article_add/',methods=["GET","POST"])
 def article_add():
     tempdata=session.get('username','')
     if not tempdata:
@@ -104,7 +118,7 @@ def article_add():
         try:
             db.session.add(newArticle)
             db.session.commit()
-            return "done"
+
         except:
             db.session.rollback()
             db.session.flush()
@@ -127,12 +141,13 @@ def article_update(titlename):
         updateArticle =Article_list.query.filter_by(title = request.form.get("title","")).first()
         #判断内容是否有更改not
         updateArticle.title = request.form.get('title')
-        updateArticle.content = request.form.get('content')
-        updateArticle.type = request.form.get('type')
+        updateArticle.content = re.findall(r"<p>(.*)</p>",request.form.get('content'))
+        print(updateArticle.content)
+        updateArticle.type = request.form.get('category')
 
         try:
             db.session.commit()
-            return "done"
+
         except:
             db.session.rollback()
             db.session.flush()
@@ -169,13 +184,35 @@ def article_del():
             try:
                 db.session.delete(del_article)
                 db.session.commit()
-                return "done"
+
             except:
                 db.session.rollback()
                 db.session.flush()
                 return  "error"
+    if request.method =="delete":
 
+        pass
     return redirect(url_for('blue.article'))
+
+
+@blue.route('/admin_index/article_delone/<data>/', methods=["GET","delete"])
+def article_delone(data):
+    tempdata = session.get('username', '')
+    if not tempdata:
+        return render_template('admin_login.html')
+
+    del_article = Article_list.query.filter_by(title=data).first()
+    print(del_article.title)
+    try:
+        db.session.delete(del_article)
+        db.session.commit()
+
+    except:
+        db.session.rollback()
+        db.session.flush()
+        return "error"
+    return redirect(url_for('blue.article'))
+
 
 @blue.route('/admin_index/category/',methods=["POST","GET"])
 def category():
@@ -214,7 +251,7 @@ def category_add():
             db.session.flush()
             return  "error"
 
-    return redirect('url_for(blue.category)')
+    return redirect(url_for('blue.category'))
 
 
 @blue.route('/admin_index/category_update/<titlename>/',methods=["GET","POST"])
@@ -256,7 +293,7 @@ def category_del(titlename):
 
 
 
-    del_article = Article.query.filter_by(title=titlename)
+    del_article = Article.query.filter_by(block_article=titlename).first()
     try:
         db.session.delete(del_article)
         db.session.commit()
@@ -269,10 +306,8 @@ def category_del(titlename):
     return redirect(url_for('blue.category'))
 
 
-@blue.route('/get/')
+@blue.route('/manager/')
 def get():
-    p=Article()
-    data = p.query.all()
-    print(data)
-    return "ok"
+
+    return render_template("manage-user.html")
 
